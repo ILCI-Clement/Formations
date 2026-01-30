@@ -94,6 +94,8 @@ def update_text_preserve_style(shape, new_text):
 ############### Interface Streamlit #################
 
 st.title("Gestionnaire de formations (Brochure + Site Internet + Gestion)")
+st.header("Editeur de données")
+st.warning("La dernière colonne ('Langue_Formation'), désigne la langue de la page de la formation ('English' ou 'Français')")
 
 with st.sidebar:
     st.title("Aperçu de la brochure", width="content")
