@@ -101,6 +101,9 @@ with st.sidebar:
 
 new_formation = st.data_editor(rows, num_rows="dynamic")
 
+st.header("Etape 1:")
+st.info("Envoyer les nouvelles données sur Airtable permet de les sauvegarder. Ainsi, si vous rafraîchissez la page, vous pourrez retrouver les modifications que vous avez faites.")
+
 if st.button("Envoyer sur Airtable"):
     airtable_payload = {
         "records": []
@@ -123,6 +126,10 @@ if st.button("Envoyer sur Airtable"):
             st.error(send.text)
 
 
+st.header("Etape 2:")
+st.info("En générant la Brochure, vous allez créer un pptx contenant toutes les données/formations présentent dans l'éditeur de données au dessus. " \
+" Les formations seront agencées automatiquement dans la Brochure (les types de formations seront regroupées)." \
+" N'hésitez pas à vérifier l'ensemble de la Brochure, car il se peut que certains textes débordent des zones de textes, et à mettre à jour le sommaire et la pagination.")
 if st.button("Générer la Brochure"):
     prs = Presentation("template.pptx")
 
@@ -225,9 +232,10 @@ if st.button("Générer la Brochure"):
         i += 1
         
     prs.save("presentation.pptx")
-    st.success("PowerPoint mis à jour")
-
+    st.toast('PowerPoint mis à jour', icon="🔥")
     
+    st.success("Brochure généré avec succès !")
+
     with open("presentation.pptx", "rb") as f:
         st.download_button(
             label="Télécharger la Brochure",
