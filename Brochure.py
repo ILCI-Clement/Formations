@@ -91,6 +91,10 @@ def update_text_preserve_style(shape, new_text):
     else:
         p.text = str(new_text) if new_text is not None else ""
 
+def delete_slide(prs, slide_index):
+    slide_id = prs.slides._sldIdLst[slide_index]
+    prs.slides._sldIdLst.remove(slide_id)
+
 ############### Interface Streamlit #################
 
 st.title("Gestionnaire de formations (Brochure + Site Internet + Gestion)")
@@ -129,9 +133,9 @@ if st.button("Envoyer sur Airtable"):
 
 
 st.header("Etape 2:")
-st.info("En générant la Brochure, vous allez créer un pptx contenant toutes les données/formations présentent dans l'éditeur de données au dessus. " \
-" Les formations seront agencées automatiquement dans la Brochure (les types de formations seront regroupées)." \
-" N'hésitez pas à vérifier l'ensemble de la Brochure, car il se peut que certains textes débordent des zones de textes, et à mettre à jour le sommaire et la pagination.")
+st.info("En générant la Brochure, vous allez créer un .pptx contenant toutes les données/formations présentent dans l'éditeur de données au dessus. " \
+" Les formations seront agencées automatiquement dans la Brochure." \
+" N'hésitez pas à vérifier l'ensemble de la Brochure, car il se peut que certains textes débordent des zones de textes.")
 if st.button("Générer la Brochure"):
     prs = Presentation("template.pptx")
 
@@ -205,7 +209,7 @@ if st.button("Générer la Brochure"):
                 if shape.name in francais_map:
                     update_text_preserve_style(shape, francais_map[shape.name])
 
-    by_model = {
+    by_model_before_del = {
         10: [],
         12: [],
         15: [],
@@ -213,19 +217,98 @@ if st.button("Générer la Brochure"):
         19: [],
     }
 
+    model_after_del = {
+        10: by_model_before_del[10],
+        11: by_model_before_del[12],
+        13: by_model_before_del[15],
+        14: by_model_before_del[17],
+        15: by_model_before_del[19]
+    }
+
     for slide, model_index in created_slides:
-        by_model[model_index].append(slide)
+        by_model_before_del[model_index].append(slide)
 
-    # on les insère dans l'ordre, après chaque slide modèle
-    offset = 0
-    for model_index in [10, 12, 15, 17, 19]:
-        target_base = model_index + 1 + offset
 
-        for s in by_model[model_index]:
-            move_slide_to(prs, s, target_base)
-            target_base += 1
-            offset += 1
+    slides_to_delete = [10, 12, 15, 17, 19]
 
+    # On trie en ordre décroissant
+    for index in sorted(slides_to_delete, reverse=True):
+        delete_slide(prs, index)
+        
+    # On insère en ordre inverse pour éviter le décalage des index
+    for model_index in [15, 14, 13, 11, 10]:  # ordre inverse des sections
+        slides_group = model_after_del[model_index]
+
+        # index d'insertion = juste après la slide modèle supprimée
+        target_index = model_index
+
+        # on insère en reverse pour éviter que ça décale
+        for s in reversed(slides_group):
+            move_slide_to(prs, s, target_index)
+
+    ##### SOMMAIRE #######
+    # Index de la slide Sommaire dans ton template
+    sommaire_slide = prs.slides[5]
+
+    # Dictionnaire pour stocker les titres
+    sommaire_data = {
+        "BACHELOR_FR": [],
+        "BACHELOR_EN": [],
+        "MASTERE_FR": [],
+        "MASTERE_EN": [],
+        "BAC6_FR": [],
+        "BAC6_EN": [],
+        "DOCTORATE": [],
+        "BTS": [],
+    }
+
+    # On parcourt les formations
+    for row in new_formation:
+        nom = row["Nom"]
+        type_form = row["Type"]
+        langue = row["Langue_Formation"]
+
+        if type_form == "BACHELOR":
+            if langue == "English":
+                sommaire_data["BACHELOR_EN"].append(nom)
+            else:
+                sommaire_data["BACHELOR_FR"].append(nom)
+
+        elif type_form == "MASTERE":
+            if langue == "English":
+                sommaire_data["MASTERE_EN"].append(nom)
+            else:
+                sommaire_data["MASTERE_FR"].append(nom)
+
+        elif type_form == "BAC+6":
+            if langue == "English":
+                sommaire_data["BAC6_EN"].append(nom)
+            else:
+                sommaire_data["BAC6_FR"].append(nom)
+
+        elif type_form == "DOCTORATE":
+            sommaire_data["DOCTORATE"].append(nom)
+
+        elif type_form == "BTS":
+            sommaire_data["BTS"].append(nom)
+
+
+    # Mapping des TextBox du sommaire
+    sommaire_mapping = {
+        "TextBox 8": "\n".join(sommaire_data["BTS"])+"\n"+"\n".join(sommaire_data["BACHELOR_FR"]),
+        "TextBox 5": "\n".join(sommaire_data["BACHELOR_EN"]),
+        "TextBox 9": "\n".join(sommaire_data["MASTERE_FR"])+"\n"+"\n".join(sommaire_data["BAC6_FR"]),
+        "TextBox 6": "\n".join(sommaire_data["MASTERE_EN"])+"\n"+"\n".join(sommaire_data["BAC6_EN"]),
+        "TextBox 7": "\n".join(sommaire_data["DOCTORATE"]),
+        "TextBox 10": "\n".join(sommaire_data["DOCTORATE"]),
+    }
+
+    # Injection dans la slide
+    for shape in sommaire_slide.shapes:
+        if shape.name in sommaire_mapping:
+            update_text_preserve_style(shape, sommaire_mapping[shape.name])
+    
+    ###### PAGINATION ######
     i = 0
     for page in prs.slides:
         for shape in page.shapes:
