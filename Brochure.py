@@ -141,7 +141,10 @@ with tab2:
     st.subheader("Tableau des données")
     edited_data = st.data_editor(st.session_state.rows, num_rows="dynamic")
     
-    if st.button("Synchroniser avec Airtable", type="primary"):
+    if st.button("Synchroniser avec Airtable"):
+        st.cache_data.clear() # Vide tout le cache
+        st.rerun() # Relance le script pour re-charger les données
+    if st.button("Envoyer les données", type="primary"):
         with st.spinner("Mise à jour en cours..."):
             airtable_payload = {
                 "records": []
@@ -160,10 +163,17 @@ with tab2:
                 payload = {"records": batch}
                 send = requests.post(url, headers=headers, json=payload)
 
-            if send.status_code != 200:
-                st.error(send.text)
-                    
-            st.success("Synchronisation terminée !")
+            if send.status_code == 200:
+                st.success("Synchronisation terminée !")
+                st.cache_data.clear() # IMPORTANT : On vide le cache car les données ont changé
+                
+                # On force la mise à jour de la session pour que l'onglet 1 voie les changements
+                rows, ids = fetch_airtable_data() 
+                st.session_state.rows = rows
+                st.session_state.ids = ids
+                st.rerun() 
+            else:
+                st.error(f"Erreur : {send.text}")
 
 # --- TAB 3 ---
 with tab3:
