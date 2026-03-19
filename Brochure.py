@@ -9,15 +9,12 @@ st.set_page_config(page_title="Gestionnaire de Brochure", layout="wide")
 if 'rows' not in st.session_state:
     st.session_state.rows = []
 
-AIRTABLE_TOKEN = st.secrets["AIRTABLE_TOKEN"]
-BASE_ID = "app7vq5k1lztBcmNF"
-TABLE_NAME = "Informations"
-
-url = f"https://api.airtable.com/v0/{BASE_ID}/{TABLE_NAME}"
+TOKEN = st.secrets["FORMATION_TOKEN"]
+API_URL = st.secrets["URL_FORMATION"]
 
 
 headers = {
-    "Authorization": f"Bearer {AIRTABLE_TOKEN}",
+    "Authorization": f"Bearer {TOKEN}",
     "Content-Type": "application/json"
 }
 
@@ -77,17 +74,64 @@ def delete_slide(prs, slide_index):
     slide_id = prs.slides._sldIdLst[slide_index]
     prs.slides._sldIdLst.remove(slide_id)
 
+@st.dialog("Ajouter une nouvelle formation !")
+def add_formation():
+    col1, col2 = st.columns(2)
+    with col1:
+        add_nom = st.text_input("Nom de la formation")
+        add_type = st.selectbox("Type ", ["BTS", "BACHELOR", "MASTERE", "BAC+6", "DOCTORATE"])
+        add_langue = st.text_input("Langue(s) de la formation")
+        add_langue_p = st.selectbox("Langue de la page de la brochure ", ["Français", "English"])
+    with col2:
+        add_desc = st.text_area("Description ", height=100)
+        add_stage = st.text_input("Stage ")
+        add_admission = st.text_input("Admission ")
+
+    with st.expander("Détails supplémentaires "):
+        c1, c2, c3 = st.columns(3)
+        af1 = c1.text_area("Point Fort 1 ")
+        af2 = c1.text_area("Point Fort 2 ")
+        af3 = c1.text_area("Point Fort 3 ")
+        ae1 = c2.text_area("Enseignement 1 ")
+        ae2 = c2.text_area("Enseignement 2 ")
+        ae3 = c2.text_area("Enseignement 3 ")
+        amet = c3.text_area("Métiers ")
+
+    if st.button("Enregistrer la formation", type="primary"):
+        new_row = {
+            "Nom": add_nom,
+            "Type": add_type,
+            "Langues": add_langue,
+            "Langue_Formation": add_langue_p,
+            "Description": add_desc,
+            "Stage": add_stage,
+            "Admission": add_admission,
+            "PointFort1": af1, "PointFort2": af2, "PointFort3": af3,
+            "Enseignement1": ae1, "Enseignement2": ae2, "Enseignement3": ae3,
+            "Metier": amet,
+            "id": None
+        }
+
+        missing = [name for name, value in new_row.items() if name != "id" and (not value or not str(value).strip())]
+        if missing:
+            st.error(f"Veuillez remplir les champs suivants : {', '.join(missing)}")
+        else:
+            st.session_state.rows.append(new_row)
+            st.success("Formation ajoutée au cache !")
+            st.rerun()
 
 @st.cache_data(ttl=600)
-def fetch_airtable_data():
-    resp = requests.get(url, headers=headers, params={"maxRecords": 100, "view": "Grid view"})
+def fetch_data():
+    resp = requests.get(f"{API_URL}/data", headers=headers, params={"maxRecords": 100, "view": "Grid view"})
     if resp.status_code == 200:
         data = resp.json()
-        return [r["fields"] for r in data["records"]], [r["id"] for r in data["records"]]
+        return [r for r in data], [r["id"] for r in data]
+    print(resp.status_code)
+    print(f"{API_URL}/data")
     return [], []
 
 if not st.session_state.rows:
-    rows, ids = fetch_airtable_data()
+    rows, ids = fetch_data()
     st.session_state.rows = rows
     st.session_state.ids = ids
 
@@ -99,12 +143,21 @@ tab1, tab2, tab3 = st.tabs(["Édition des Formations", "Vue d'ensemble", "Géné
 
 # --- TAB 1 ---
 with tab1:
+    st.subheader("Ajouter une formation")
+    if st.button("Ajouter une formation", type="primary"):
+        add_formation()
+    
     st.subheader("Modifier une formation")
     formation_names = [r.get("Nom", "Sans nom") for r in st.session_state.rows]
     selected_name = st.selectbox("Choisir une formation à modifier", formation_names)
-    
+
     idx = formation_names.index(selected_name)
     current_row = st.session_state.rows[idx]
+
+    if st.button("Supprimer la formation", use_container_width=True):
+        st.session_state.rows.pop(idx)
+        st.warning(f"La formation {selected_name} a été retirée du cache.")
+        st.rerun()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -120,7 +173,7 @@ with tab1:
         new_admission = st.text_input("Admission", current_row.get("Admission", ""))
 
     with st.expander("Détails supplémentaires"):
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3 = st.columns(3, border=True)
         f1 = c1.text_area("Point Fort 1", current_row.get("PointFort1", ""))
         f2 = c1.text_area("Point Fort 2", current_row.get("PointFort2", ""))
         f3 = c1.text_area("Point Fort 3", current_row.get("PointFort3", ""))
@@ -129,46 +182,31 @@ with tab1:
         e3 = c2.text_area("Enseignement 3", current_row.get("Enseignement3", ""))
         met = c3.text_area("Métiers", current_row.get("Metier", ""))
 
-    if st.button("Enregistrement locale"):
+    if st.button("Enregistrer les modifications", type="primary"):
         st.session_state.rows[idx].update({
             "Nom": new_nom, "Type": new_type, "Langues": new_langue, "Langue_Formation": new_langue_p, "Stage": new_stage, "Admission": new_admission,
             "Description": new_desc, "PointFort1": f1, "PointFort2": f2, "PointFort3": f3, "Enseignement1": e1, "Enseignement2": e2, "Enseignement3": e3, "Metier": met
         })
         st.success(f"Modifications pour {new_nom} enregistrées temporairement.")
 
+
 # --- TAB 2 ---
 with tab2:
     st.subheader("Tableau des données")
-    edited_data = st.data_editor(st.session_state.rows, num_rows="dynamic")
-    
-    if st.button("Synchroniser avec Airtable"):
-        st.cache_data.clear() # Vide tout le cache
-        st.rerun() # Relance le script pour re-charger les données
+    st.dataframe(st.session_state.rows)
+
     if st.button("Envoyer les données", type="primary"):
         with st.spinner("Mise à jour en cours..."):
-            airtable_payload = {
-                "records": []
-            }
+            requests.delete(f"{API_URL}/data", headers=headers)
 
-            for row in edited_data:
-                airtable_payload["records"].append({
-                    "fields": row
-            })
-
-            for batch in chunk_list(st.session_state.ids, 10):
-                params = [("records[]", rid) for rid in batch]
-                requests.delete(url, headers=headers, params=params)
-
-            for batch in chunk_list(airtable_payload["records"], 10):
-                payload = {"records": batch}
-                send = requests.post(url, headers=headers, json=payload)
+            send = requests.post(f"{API_URL}/data", headers=headers, json=st.session_state.rows)
 
             if send.status_code == 200:
                 st.success("Synchronisation terminée !")
                 st.cache_data.clear() # IMPORTANT : On vide le cache car les données ont changé
                 
                 # On force la mise à jour de la session pour que l'onglet 1 voie les changements
-                rows, ids = fetch_airtable_data() 
+                rows, ids = fetch_data() 
                 st.session_state.rows = rows
                 st.session_state.ids = ids
                 st.rerun() 
@@ -185,7 +223,7 @@ with tab3:
             created_slides = []
             
             # --- CREATION DES SLIDES ---
-            for row in edited_data:
+            for row in st.session_state.rows:
                 mapping = {
                     "TextBox 48": row.get("Nom"), "TextBox 50": row.get("Type"),
                     "TextBox 34": row.get("Langues"), "TextBox 38": row.get("Stage"),
@@ -235,7 +273,7 @@ with tab3:
             s_noms = {k: [] for k in ["BTS","BACH_FR","BACH_EN","MAST_FR","MAST_EN","B6_FR","B6_EN","DOC"]}
             s_pgs = {k: [] for k in ["BTS_P","BACH_FR_P","BACH_EN_P","MAST_FR_P","MAST_EN_P","B6_FR_P","B6_EN_P","DOC_P"]}
 
-            for row in edited_data:
+            for row in st.session_state.rows:
                 n, t, l = row.get("Nom"), row.get("Type"), row.get("Langue_Formation")
                 p = pages_map.get(n, "-")
                 
