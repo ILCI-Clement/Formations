@@ -198,8 +198,10 @@ with tab2:
     if st.button("Envoyer les données", type="primary"):
         with st.spinner("Mise à jour en cours..."):
             requests.delete(f"{API_URL}/data", headers=headers)
+            requests.delete(url, headers=headers)
 
             send = requests.post(f"{API_URL}/data", headers=headers, json=st.session_state.rows)
+            send = requests.post(url, headers=headers, json=st.session_state.rows)
 
             if send.status_code == 200:
                 st.success("Synchronisation terminée !")
